@@ -86,6 +86,33 @@ def _safe_div(numerator: float, denominator: float) -> float:
     return float(numerator / denominator) if denominator else 0.0
 
 
+def _compute_metrics(
+    predicted_anomaly: np.ndarray, true_anomaly: np.ndarray
+) -> dict[str, float]:
+    tp = int((predicted_anomaly & true_anomaly).sum())
+    tn = int((~predicted_anomaly & ~true_anomaly).sum())
+    fp = int((predicted_anomaly & ~true_anomaly).sum())
+    fn = int((~predicted_anomaly & true_anomaly).sum())
+
+    precision = _safe_div(tp, tp + fp)
+    recall = _safe_div(tp, tp + fn)
+    f1_score = _safe_div(2 * precision * recall, precision + recall)
+    false_positive_rate = _safe_div(fp, fp + tn)
+    accuracy = _safe_div(tp + tn, len(true_anomaly))
+
+    return {
+        "tp": tp,
+        "tn": tn,
+        "fp": fp,
+        "fn": fn,
+        "precision": precision,
+        "recall": recall,
+        "f1_score": f1_score,
+        "false_positive_rate": false_positive_rate,
+        "accuracy": accuracy,
+    }
+
+
 def _save_evaluation_summary(path: Path, lines: List[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -112,33 +139,52 @@ def main() -> None:
 
     true_anomaly = labeled["Label"] != "BENIGN"
 
+    base_metrics = _compute_metrics(predicted_anomaly, true_anomaly.to_numpy())
+
     total_flows = int(len(labeled))
     total_attacks = int(true_anomaly.sum())
     total_benign = int((~true_anomaly).sum())
 
-    tp = int((predicted_anomaly & true_anomaly).sum())
-    tn = int((~predicted_anomaly & ~true_anomaly).sum())
-    fp = int((predicted_anomaly & ~true_anomaly).sum())
-    fn = int((~predicted_anomaly & true_anomaly).sum())
-
-    precision = _safe_div(tp, tp + fp)
-    recall = _safe_div(tp, tp + fn)
-    f1_score = _safe_div(2 * precision * recall, precision + recall)
-    false_positive_rate = _safe_div(fp, fp + tn)
-    accuracy = _safe_div(tp + tn, total_flows)
-
     print(f"Total flows: {total_flows}")
     print(f"Total real attacks: {total_attacks}")
     print(f"Total real benign: {total_benign}")
-    print(f"TP: {tp}")
-    print(f"TN: {tn}")
-    print(f"FP: {fp}")
-    print(f"FN: {fn}")
-    print(f"Precision: {precision:.4f}")
-    print(f"Recall: {recall:.4f}")
-    print(f"F1 Score: {f1_score:.4f}")
-    print(f"False Positive Rate: {false_positive_rate:.4f}")
-    print(f"Accuracy: {accuracy:.4f}")
+    print(f"TP: {base_metrics['tp']}")
+    print(f"TN: {base_metrics['tn']}")
+    print(f"FP: {base_metrics['fp']}")
+    print(f"FN: {base_metrics['fn']}")
+    print(f"Precision: {base_metrics['precision']:.4f}")
+    print(f"Recall: {base_metrics['recall']:.4f}")
+    print(f"F1 Score: {base_metrics['f1_score']:.4f}")
+    print(f"False Positive Rate: {base_metrics['false_positive_rate']:.4f}")
+    print(f"Accuracy: {base_metrics['accuracy']:.4f}")
+
+    print("Threshold sweep:")
+    best_threshold = None
+    best_metrics = None
+    for threshold in config.EVAL_THRESHOLDS:
+        sweep_predicted = scores < threshold
+        sweep_metrics = _compute_metrics(sweep_predicted, true_anomaly.to_numpy())
+        print(
+            f"T={threshold:.2f} "
+            f"F1={sweep_metrics['f1_score']:.4f} "
+            f"P={sweep_metrics['precision']:.4f} "
+            f"R={sweep_metrics['recall']:.4f} "
+            f"FPR={sweep_metrics['false_positive_rate']:.4f} "
+            f"ACC={sweep_metrics['accuracy']:.4f}"
+        )
+        if best_metrics is None or sweep_metrics["f1_score"] > best_metrics["f1_score"]:
+            best_metrics = sweep_metrics
+            best_threshold = threshold
+
+    if best_metrics is not None:
+        print(
+            "Best threshold by F1: "
+            f"T={best_threshold:.2f} "
+            f"F1={best_metrics['f1_score']:.4f} "
+            f"P={best_metrics['precision']:.4f} "
+            f"R={best_metrics['recall']:.4f}"
+        )
+        print(f"Recommended T_BASE (best F1): {best_threshold:.2f}")
 
     attack_counts = labeled.loc[labeled["Label"] != "BENIGN", "Label"].value_counts()
     print("Top 10 attack types:")
@@ -150,15 +196,15 @@ def main() -> None:
         f"Total flows: {total_flows}",
         f"Total real attacks: {total_attacks}",
         f"Total real benign: {total_benign}",
-        f"TP: {tp}",
-        f"TN: {tn}",
-        f"FP: {fp}",
-        f"FN: {fn}",
-        f"Precision: {precision:.4f}",
-        f"Recall: {recall:.4f}",
-        f"F1 Score: {f1_score:.4f}",
-        f"False Positive Rate: {false_positive_rate:.4f}",
-        f"Accuracy: {accuracy:.4f}",
+        f"TP: {base_metrics['tp']}",
+        f"TN: {base_metrics['tn']}",
+        f"FP: {base_metrics['fp']}",
+        f"FN: {base_metrics['fn']}",
+        f"Precision: {base_metrics['precision']:.4f}",
+        f"Recall: {base_metrics['recall']:.4f}",
+        f"F1 Score: {base_metrics['f1_score']:.4f}",
+        f"False Positive Rate: {base_metrics['false_positive_rate']:.4f}",
+        f"Accuracy: {base_metrics['accuracy']:.4f}",
     ]
 
     output_path = Path(config.DATA_PROCESSED_DIR) / "evaluation_results.txt"

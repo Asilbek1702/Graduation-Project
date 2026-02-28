@@ -6,15 +6,19 @@ DATA_PROCESSED_DIR = "data/processed"
 MODEL_PATH = "models/isolation_forest.pkl"
 
 # === ISOLATION FOREST PARAMS ===
-IF_N_ESTIMATORS = 100
-IF_CONTAMINATION = 0.05
+IF_N_ESTIMATORS = 200
+IF_MAX_SAMPLES = 512
+IF_CONTAMINATION = 0.15
 IF_RANDOM_STATE = 42
 
 # === ANOMALY THRESHOLD (base) ===
-T_BASE = 0.30
-T_LOW_LOAD = 0.35    # when network load <= 0.30
-T_MEDIUM_LOAD = 0.30 # when 0.30 < load <= 0.70
-T_HIGH_LOAD = 0.25   # when load > 0.70
+T_BASE = 0.75
+T_LOW_LOAD = 0.80     # strict mode (low network load)
+T_MEDIUM_LOAD = 0.75  # normal mode
+T_HIGH_LOAD = 0.68    # relaxed mode (high network load, avoid false positives)
+
+# === EVALUATION THRESHOLDS ===
+EVAL_THRESHOLDS = [0.70, 0.72, 0.75, 0.78, 0.80]
 
 # === NETWORK LOAD LEVELS ===
 LOAD_LOW_MAX = 0.30
@@ -75,4 +79,13 @@ FEATURE_COLUMNS = [
     "PSH Flag Count",
     "ACK Flag Count",
     "URG Flag Count",
+    "Fwd Packet Length Max",
+    "Bwd Packet Length Max",
+    "Fwd Packet Length Mean",
+    "Bwd Packet Length Mean",
+    "Packet Length Mean",
+    "Packet Length Std",
+    "Average Packet Size",
+    "Avg Fwd Segment Size",
+    "Avg Bwd Segment Size",
 ]

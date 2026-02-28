@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 def train_model(X: pd.DataFrame) -> IsolationForest:
     model = IsolationForest(
         n_estimators=config.IF_N_ESTIMATORS,
+        max_samples=config.IF_MAX_SAMPLES,
         contamination=config.IF_CONTAMINATION,
         random_state=config.IF_RANDOM_STATE,
     )
@@ -56,5 +57,7 @@ def get_anomaly_score(model: IsolationForest, X: pd.DataFrame) -> np.ndarray:
     return normalized
 
 
-def flag_anomalies(scores: np.ndarray, threshold: float) -> np.ndarray:
+def flag_anomalies(scores: np.ndarray, threshold: float | None = None) -> np.ndarray:
+    if threshold is None:
+        threshold = config.T_BASE
     return scores < threshold
