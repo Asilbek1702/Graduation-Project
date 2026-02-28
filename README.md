@@ -140,16 +140,16 @@ block duration increases to 300 seconds. Three times → 600 seconds.
 ## 9. Configuration
 All parameters are defined in config.py. Key settings:
 
-  T_BASE = 0.75                 # anomaly threshold (optimized by evaluation)
-  T_LOW_LOAD = 0.80             # strict mode
-  T_MEDIUM_LOAD = 0.75          # normal mode
-  T_HIGH_LOAD = 0.68            # relaxed mode
-  WINDOW_SIZE = 30              # seconds for stability module
-  IF_CONTAMINATION = 0.15       # Isolation Forest contamination
-  IF_N_ESTIMATORS = 200         # Isolation Forest trees
-  RF_N_ESTIMATORS = 200         # Random Forest trees
-  RF_PROBA_THRESHOLD = 0.50     # RF confirmation threshold
-  BLOCK_DURATION = 120          # seconds
+-  T_BASE = 0.75                 # anomaly threshold (optimized by evaluation)
+-  T_LOW_LOAD = 0.80             # strict mode
+-  T_MEDIUM_LOAD = 0.75          # normal mode
+-  T_HIGH_LOAD = 0.68            # relaxed mode
+-  WINDOW_SIZE = 30              # seconds for stability module
+-  IF_CONTAMINATION = 0.15       # Isolation Forest contamination
+-  IF_N_ESTIMATORS = 200         # Isolation Forest trees
+-  RF_N_ESTIMATORS = 200         # Random Forest trees
+-  RF_PROBA_THRESHOLD = 0.50     # RF confirmation threshold
+-  BLOCK_DURATION = 120          # seconds
 
 ## 10. Dataset
 Name:   CIC-IDS-2017 (Canadian Institute for Cybersecurity)
