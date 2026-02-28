@@ -9,12 +9,13 @@ from typing import List
 
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import train_test_split
 
 if "" not in sys.path:
     sys.path.append("")
 
 import config  # noqa: E402
-from ml_engine import anomaly_detection, feature_extraction  # noqa: E402
+from ml_engine import anomaly_detection, feature_extraction, semi_supervised  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -133,9 +134,52 @@ def main() -> None:
     logger.info("Loading trained Isolation Forest model")
     model = anomaly_detection.load_model()
 
+    logger.info("Loading second-level Random Forest model")
+    rf_model = semi_supervised.load_second_level()
+
+    logger.info("Checking Random Forest overfitting (train vs test)")
+    X_rf = labeled.loc[:, config.FEATURE_COLUMNS]
+    y_rf = (labeled["Label"] != "BENIGN").astype(int)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_rf,
+        y_rf,
+        test_size=0.20,
+        random_state=config.IF_RANDOM_STATE,
+        stratify=y_rf,
+    )
+
+    rf_train_pred = rf_model.predict(X_train)
+    rf_test_pred = rf_model.predict(X_test)
+
+    rf_train_metrics = _compute_metrics(
+        rf_train_pred.astype(bool), y_train.to_numpy().astype(bool)
+    )
+    rf_test_metrics = _compute_metrics(
+        rf_test_pred.astype(bool), y_test.to_numpy().astype(bool)
+    )
+
+    print("Random Forest only (train split):")
+    print(f"Precision: {rf_train_metrics['precision']:.4f}")
+    print(f"Recall: {rf_train_metrics['recall']:.4f}")
+    print(f"F1 Score: {rf_train_metrics['f1_score']:.4f}")
+    print(f"Accuracy: {rf_train_metrics['accuracy']:.4f}")
+
+    print("Random Forest only (test split):")
+    print(f"Precision: {rf_test_metrics['precision']:.4f}")
+    print(f"Recall: {rf_test_metrics['recall']:.4f}")
+    print(f"F1 Score: {rf_test_metrics['f1_score']:.4f}")
+    print(f"Accuracy: {rf_test_metrics['accuracy']:.4f}")
+
+    f1_gap = rf_train_metrics["f1_score"] - rf_test_metrics["f1_score"]
+    if f1_gap > 0.05:
+        print("WARNING: Possible overfitting detected (train/test F1 gap > 0.05)")
+
     logger.info("Scoring data")
     scores = anomaly_detection.get_anomaly_score(model, features)
-    predicted_anomaly = scores < config.T_BASE
+    X_features = features.loc[:, config.FEATURE_COLUMNS]
+    if_flags = scores < config.T_BASE
+    rf_proba = rf_model.predict_proba(X_features)[:, 1]
+    predicted_anomaly = if_flags & (rf_proba >= config.RF_PROBA_THRESHOLD)
 
     true_anomaly = labeled["Label"] != "BENIGN"
 
@@ -158,33 +202,18 @@ def main() -> None:
     print(f"False Positive Rate: {base_metrics['false_positive_rate']:.4f}")
     print(f"Accuracy: {base_metrics['accuracy']:.4f}")
 
-    print("Threshold sweep:")
-    best_threshold = None
-    best_metrics = None
-    for threshold in config.EVAL_THRESHOLDS:
-        sweep_predicted = scores < threshold
+    print("RF probability threshold sweep:")
+    sweep_thresholds = [0.30, 0.40, 0.50, 0.60, 0.70]
+    for threshold in sweep_thresholds:
+        sweep_predicted = if_flags & (rf_proba >= threshold)
         sweep_metrics = _compute_metrics(sweep_predicted, true_anomaly.to_numpy())
         print(
-            f"T={threshold:.2f} "
-            f"F1={sweep_metrics['f1_score']:.4f} "
             f"P={sweep_metrics['precision']:.4f} "
             f"R={sweep_metrics['recall']:.4f} "
+            f"F1={sweep_metrics['f1_score']:.4f} "
             f"FPR={sweep_metrics['false_positive_rate']:.4f} "
-            f"ACC={sweep_metrics['accuracy']:.4f}"
+            f"RF_T={threshold:.2f}"
         )
-        if best_metrics is None or sweep_metrics["f1_score"] > best_metrics["f1_score"]:
-            best_metrics = sweep_metrics
-            best_threshold = threshold
-
-    if best_metrics is not None:
-        print(
-            "Best threshold by F1: "
-            f"T={best_threshold:.2f} "
-            f"F1={best_metrics['f1_score']:.4f} "
-            f"P={best_metrics['precision']:.4f} "
-            f"R={best_metrics['recall']:.4f}"
-        )
-        print(f"Recommended T_BASE (best F1): {best_threshold:.2f}")
 
     attack_counts = labeled.loc[labeled["Label"] != "BENIGN", "Label"].value_counts()
     print("Top 10 attack types:")
@@ -206,6 +235,28 @@ def main() -> None:
         f"False Positive Rate: {base_metrics['false_positive_rate']:.4f}",
         f"Accuracy: {base_metrics['accuracy']:.4f}",
     ]
+    summary_lines.extend(
+        [
+            "",
+            "Random Forest Overfitting Check",
+            "--------------------------------",
+            "Train split:",
+            f"  Precision:  {rf_train_metrics['precision']:.4f}",
+            f"  Recall:     {rf_train_metrics['recall']:.4f}",
+            f"  F1 Score:   {rf_train_metrics['f1_score']:.4f}",
+            f"  Accuracy:   {rf_train_metrics['accuracy']:.4f}",
+            "",
+            "Test split:",
+            f"  Precision:  {rf_test_metrics['precision']:.4f}",
+            f"  Recall:     {rf_test_metrics['recall']:.4f}",
+            f"  F1 Score:   {rf_test_metrics['f1_score']:.4f}",
+            f"  Accuracy:   {rf_test_metrics['accuracy']:.4f}",
+            "",
+            f"Train/Test F1 Gap: {f1_gap:.4f}",
+            "Overfitting status: "
+            + ("WARNING (gap > 0.05)" if f1_gap > 0.05 else "PASSED (gap <= 0.05)"),
+        ]
+    )
 
     output_path = Path(config.DATA_PROCESSED_DIR) / "evaluation_results.txt"
     _save_evaluation_summary(output_path, summary_lines)

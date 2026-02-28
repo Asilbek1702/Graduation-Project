@@ -13,7 +13,7 @@ if "" not in sys.path:
     sys.path.append("")
 
 import config  # noqa: E402
-from ml_engine import anomaly_detection, feature_extraction  # noqa: E402
+from ml_engine import anomaly_detection, feature_extraction, semi_supervised  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +132,12 @@ def main() -> None:
 
     logger.info("Training Isolation Forest model")
     model = anomaly_detection.train_model(X_train)
+
+    logger.info("Training second-level Random Forest")
+    X_rf = labeled.loc[:, config.FEATURE_COLUMNS]
+    y_rf = (labeled["Label"] != "BENIGN").astype(int)
+    semi_supervised.train_second_level(X_rf, y_rf)
+    logger.info("Second-level Random Forest trained and saved.")
 
     logger.info("Scoring full dataset")
     scores = anomaly_detection.get_anomaly_score(model, X_full)
