@@ -1,0 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0d1117;
+  --sidebar: #111827;
+  --card: #161d2e;
+  --card2: #1a2235;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --text3: #4b5563;
+  --cyan: #22d3ee;
+  --cyan-dim: rgba(34,211,238,0.1);
+  --green: #10b981;
+  --green-dim: rgba(16,185,129,0.1);
+  --red: #ef4444;
+  --red-dim: rgba(239,68,68,0.1);
+  --orange: #f97316;
+  --orange-dim: rgba(249,115,22,0.1);
+  --yellow: #eab308;
+  --font: 'Inter', sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  min-height: 100vh;
+  font-size: 13px;
+}
+
+/* BADGES */
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+.b-low      { background: var(--green-dim); color: var(--green); }
+.b-medium   { background: rgba(234,179,8,0.12); color: var(--yellow); }
+.b-high     { background: var(--orange-dim); color: var(--orange); }
+.b-critical { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239,68,68,0.25); }
+.b-log      { background: rgba(75,85,99,0.3); color: #9ca3af; }
+.b-monitor  { background: rgba(234,179,8,0.1); color: var(--yellow); }
+
+/* MONO */
+.ip-mono    { font-family: monospace; font-size: 11px; color: var(--text); }
+.time-mono  { font-family: monospace; font-size: 11px; color: var(--text2); }
+.evtid-mono { font-family: monospace; font-size: 10px; color: var(--cyan); }
+
+/* SCROLLBAR */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+@keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-5px)} 80%{transform:translateX(5px)} }
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
