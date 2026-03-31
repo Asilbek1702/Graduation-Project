@@ -19,14 +19,13 @@ export default function Layout() {
         borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column',
         position: 'fixed', left: 0, top: 0, bottom: 0, zIndex: 100,
       }}>
-        {/* Logo */}
+        {/* Logo — no version subtitle */}
         <div style={{ padding: '18px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)' }}>
           <div style={{ width: 28, height: 28, background: 'linear-gradient(135deg,#22d3ee,#0ea5e9)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           </div>
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', letterSpacing: 0.5 }}>Percepta</div>
-            <div style={{ fontSize: 9, color: 'var(--text3)', letterSpacing: 0.5, textTransform: 'uppercase' }}>IDS/IPS SYSTEM v2.0</div>
           </div>
         </div>
 

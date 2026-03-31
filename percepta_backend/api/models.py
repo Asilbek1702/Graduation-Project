@@ -41,10 +41,10 @@ class Event(Base):
     # --- Context and risk ---
     network_load = Column(Float, nullable=True)
     risk_score = Column(Float, nullable=False)
-    risk_level = Column(String(10), index=True, nullable=False)  # LOW/MEDIUM/HIGH/CRITICAL
+    risk_level = Column(String(10), index=True, nullable=False)
 
     # --- IPS actions ---
-    action_taken = Column(String(20), nullable=False)   # LOG/MONITOR/RATE_LIMIT/TEMP_BLOCK
+    action_taken = Column(String(20), nullable=False)
     action_duration_seconds = Column(Integer, nullable=True)
     block_expires_at = Column(DateTime, nullable=True)
 
@@ -66,3 +66,37 @@ class BlockedIP(Base):
     current_risk_level = Column(String(10), default="CRITICAL", nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     reason = Column(Text, nullable=True)
+
+
+class UserSession(Base):
+    """
+    Tracks network user sessions for the Logs page.
+    One row per unique IP per day.
+    Created automatically when a new event arrives from a new IP.
+    Updated on every subsequent event from the same IP (same day).
+    """
+
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Unique session identifier  e.g. "ses_000001"
+    session_id = Column(String(32), unique=True, index=True, nullable=False)
+
+    # The IP address of this session
+    ip_address = Column(String(45), index=True, nullable=False)
+
+    # Day this session belongs to (date only, no time)  e.g. 2026-03-13
+    session_date = Column(String(10), index=True, nullable=False)
+
+    # First event time for this IP on this day
+    login_time = Column(DateTime, nullable=False)
+
+    # Last event time for this IP on this day (updated on every new event)
+    logout_time = Column(DateTime, nullable=True)
+
+    # Total bytes transferred (sum of total_bytes from all events)
+    traffic_bytes = Column(Integer, default=0, nullable=False)
+
+    # ACTIVE | ENDED
+    status = Column(String(10), default="ACTIVE", nullable=False)
