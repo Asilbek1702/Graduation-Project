@@ -1,218 +1,282 @@
-Percepta — Web Platform & Backend
-Developer: Asilbek Tashpulatov
-FastAPI Backend  •  PostgreSQL  •  React Dashboard
+# Percepta — Web Platform & Backend
 
-Overview
-This document covers the web platform and backend API component of the Percepta IDS/IPS system. My responsibility is the FastAPI backend that stores network events from the ML engine, manages blocked IPs, and exposes a REST API — and the React dashboard that gives administrators a real-time view of network activity.
-The backend acts as the central hub of the system: the ML engine sends events to it, and the React frontend reads from it. It is the only component that talks to the PostgreSQL database.
+**Developer:** Asilbek Tashpulatov  
+**Stack:** FastAPI · PostgreSQL · React · Vite
 
-Tech Stack
-Layer	Technology	Purpose
-Backend	FastAPI	REST API framework — high performance, automatic /docs generation
-Backend	SQLAlchemy	ORM — Python classes map to PostgreSQL tables
-Backend	Pydantic v2	Request/response validation — rejects bad data before it hits the DB
-Backend	Uvicorn	ASGI server that runs the FastAPI app
-Database	PostgreSQL	Main production database
-Database	SQLite	Optional local dev database (no setup needed)
-Frontend	React + Vite	Component-based UI, fast dev server
-Frontend	React Router	Client-side page navigation
-Frontend	Fetch API	Built-in browser API for HTTP calls — no extra libraries
-Export	openpyxl	Generates .xlsx Excel files for Export Today button
+> Part of the university graduate project:  
+> *Anomaly Detection and Intrusion Prevention in University Networks via Isolation Forest–Based IDS/IPS*
 
+---
 
-Folder Structure
+## Overview
+
+This repository contains the **web platform and backend API** for the Percepta IDS/IPS system.
+
+The backend is the central hub of the system — the ML engine sends events to it, and the React dashboard reads from it. It is the only component that communicates directly with the PostgreSQL database.
+
+```
+ML Engine  →  POST /api/events/  →  FastAPI Backend  →  PostgreSQL
+React      →  GET  /api/events/  →  FastAPI Backend  →  PostgreSQL
+```
+
+---
+
+## Tech Stack
+
+| Layer     | Technology      | Purpose                                                    |
+|-----------|-----------------|------------------------------------------------------------|
+| Backend   | FastAPI         | REST API framework — fast, automatic /docs generation      |
+| Backend   | SQLAlchemy      | ORM — Python classes map to PostgreSQL tables              |
+| Backend   | Pydantic v2     | Request/response validation — rejects bad data before DB   |
+| Backend   | Uvicorn         | ASGI server that runs the FastAPI app                      |
+| Database  | PostgreSQL      | Main production database                                   |
+| Frontend  | React + Vite    | Component-based UI, fast dev server                        |
+| Frontend  | React Router    | Client-side page navigation                                |
+| Frontend  | Fetch API       | Built-in browser HTTP calls — no extra libraries needed    |
+| Export    | openpyxl        | Generates .xlsx Excel files for the Export Today button    |
+
+---
+
+## Project Structure
+
+### Backend — `percepta_backend/`
+
+```
 percepta_backend/
-percepta_backend/
-├── main.py                    ← App entry point
+├── main.py                    # App entry point — CORS, table creation, router registration
 ├── requirements.txt
-├── .env                       ← Database URL (not in GitHub)
-├── migrate_sessions.py        ← One-time migration script
+├── .env                       # Database URL (not committed to GitHub)
+├── migrate_sessions.py        # One-time script to populate user_sessions from existing events
 └── api/
     ├── __init__.py
-    ├── database.py            ← PostgreSQL connection
-    ├── models.py              ← Table definitions (ORM)
-    ├── schemas.py             ← Pydantic validation schemas
-    ├── crud.py                ← All database operations
+    ├── database.py            # PostgreSQL connection and session factory
+    ├── models.py              # SQLAlchemy ORM — defines all 3 tables
+    ├── schemas.py             # Pydantic validation schemas (in/out)
+    ├── crud.py                # All database read/write logic
     └── routes/
         ├── __init__.py
-        ├── events.py          ← /api/events/
-        ├── stats.py           ← /api/stats/
-        ├── blocked.py         ← /api/blocked, /api/block, /api/unblock
-        ├── ip.py              ← /api/ip/{ip}
-        └── sessions.py        ← /api/sessions/
+        ├── events.py          # GET/POST /api/events/
+        ├── stats.py           # GET /api/stats/ and /api/stats/chart-data
+        ├── blocked.py         # GET /api/blocked, POST /api/block, POST /api/unblock
+        ├── ip.py              # GET /api/ip/{ip}
+        └── sessions.py        # GET /api/sessions/, GET /api/sessions/export
+```
 
-percepta-frontend/
+### Frontend — `percepta-frontend/`
+
+```
 percepta-frontend/
 ├── index.html
-├── vite.config.js             ← host: 127.0.0.1, port: 5173
+├── vite.config.js             # host: 127.0.0.1, port: 5173
 ├── package.json
 └── src/
-    ├── main.jsx               ← React entry point
-    ├── App.jsx                ← Routes + providers
-    ├── index.css              ← CSS variables, global styles
+    ├── main.jsx               # React entry point
+    ├── App.jsx                # Routes + AuthProvider + ToastProvider
+    ├── index.css              # CSS variables and global styles
     ├── api/
-    │   └── index.js           ← All fetch() calls to backend
+    │   └── index.js           # All fetch() calls to the backend (single source of truth)
     ├── hooks/
-    │   ├── useAuth.jsx        ← Login/logout/sessionStorage
-    │   └── useToast.jsx       ← Toast notifications
+    │   ├── useAuth.jsx        # Login / logout / sessionStorage
+    │   └── useToast.jsx       # Toast notifications
     ├── components/
-    │   ├── Layout.jsx         ← Sidebar + topbar
-    │   └── EventModal.jsx     ← Event detail popup + Block IP
+    │   ├── Layout.jsx         # Sidebar + topbar shell (wraps all pages)
+    │   └── EventModal.jsx     # Event detail popup + Block IP button
     └── pages/
         ├── LoginPage.jsx
-        ├── DashboardPage.jsx  ← Charts + stat cards
-        ├── EventsPage.jsx     ← Events table
-        ├── BlockedPage.jsx    ← Blocked IPs
-        └── LogsPage.jsx       ← Session log + Export Today
+        ├── DashboardPage.jsx  # Stat cards, chart, recent events, protocol mix
+        ├── EventsPage.jsx     # Events table with search, filter, sort
+        ├── BlockedPage.jsx    # Blocked IPs management
+        └── LogsPage.jsx       # Session log table + Export Today (.xlsx)
+```
 
+---
 
-Backend — File by File
-main.py
-Entry point. Does three things on startup:
-• Calls 
-• Runs Base.metadata.create_all() — creates all tables in PostgreSQL if they don't exist yet
-• Adds CORS middleware allowing the React app at localhost:5173 to call the API
-• Registers all 5 routers: events, stats, blocked, ip, sessions
+## Backend — File Descriptions
 
-api/database.py
-Manages the PostgreSQL connection. Reads DATABASE_URL from the .env file. The key function is get_db() — a FastAPI dependency that automatically opens a database session at the start of each request and closes it when the request is done, even if an error occurred.
+### `main.py`
+Entry point for the FastAPI application. On startup it:
+- Runs `Base.metadata.create_all()` — creates all PostgreSQL tables if they don't exist yet
+- Adds CORS middleware so the React app at `localhost:5173` can call the API
+- Registers all 5 routers: events, stats, blocked, ip, sessions
 
-api/models.py
-Defines the three database tables as Python classes:
-Table	Rows represent	Key columns
-events	Every event received from the ML engine	source_ip, anomaly_score, risk_level, action_taken, timestamp
-blocked_ips	Currently blocked IP addresses	ip_address, strike_count, block_expires_at, is_active
-user_sessions	One network session per IP per day	ip_address, session_date, login_time, logout_time, traffic_bytes, status
+### `api/database.py`
+Manages the PostgreSQL connection. Reads `DATABASE_URL` from the `.env` file.  
+The `get_db()` function is a FastAPI dependency — it opens a session at the start of each request and closes it automatically when done, even if an error occurred.
 
-Tables are created automatically by SQLAlchemy on first backend startup — no manual SQL needed.
+### `api/models.py`
+Defines 3 database tables as SQLAlchemy Python classes:
 
-api/schemas.py
-Pydantic v2 schemas define what data is allowed in and out of each endpoint. If the ML engine sends a wrong field type (e.g. a string where a float is expected), FastAPI returns HTTP 422 automatically without any code in the route handler.
-Schema	Used for
-EventCreate	Validating incoming POST /api/events/ from ML engine (25 fields)
-EventResponse	Formatting outgoing event data to the frontend
-BlockedIPResponse	Blocked IP data sent to the Blocked IPs page
-IPStatusResponse	Single IP block status check
-StatsResponse	Dashboard stat cards (total flows, blocked IPs, network load, risk distribution)
-UserSessionResponse	Session rows for the Logs page
+| Table           | Rows represent                          | Key columns                                                        |
+|-----------------|-----------------------------------------|--------------------------------------------------------------------|
+| `events`        | Every event from the ML engine          | source_ip, anomaly_score, risk_level, action_taken, timestamp      |
+| `blocked_ips`   | Currently blocked IP addresses          | ip_address, strike_count, block_expires_at, is_active              |
+| `user_sessions` | One network session per IP per day      | ip_address, session_date, login_time, logout_time, traffic_bytes   |
 
-api/crud.py
-All database read/write logic. Routes never touch the database directly — they always call a function from crud.py. This keeps routes clean and makes the database logic easy to test.
-Important functions:
-• create_event() — saves a new event. Also automatically calls _upsert_blocked_ip() if action is TEMP_BLOCK, and _upsert_user_session() to update the sessions table
-• get_stats() — runs COUNT, AVG, and GROUP BY queries to compute dashboard card data
-• _upsert_user_session() — for a new IP on a new day: creates a session row. For a returning IP: updates logout_time and adds traffic bytes
-• _upsert_blocked_ip() — creates or updates a blocked_ips row. Increments strike_count on repeated blocks
+Tables are created automatically on first backend startup — no manual SQL needed.
 
-api/routes/events.py
-Two endpoints:
-• [object Object] — the ML engine sends one event here after analyzing a network flow. The body is validated by EventCreate schema and saved via crud.create_event().
-• [object Object] — the frontend reads events for the Events page. Supports query params: limit, risk_level, source_ip. Always returns newest first.
+### `api/schemas.py`
+Pydantic v2 schemas define what data is allowed in and out of each endpoint. If the ML engine sends a wrong field type (e.g. a string where a float is expected), FastAPI returns HTTP 422 automatically — no extra validation code needed in the routes.
 
-api/routes/stats.py
-Two endpoints:
-• [object Object] — returns aggregated numbers for the dashboard stat cards: total flows, total anomalies, risk distribution (LOW/MEDIUM/HIGH/CRITICAL counts), active blocked IPs, and average network load.
-• [object Object] — returns time-bucketed data for the chart. For 24h: 12 buckets of 2 hours each, labeled 00/02/04.../22. For 7d: 7 daily buckets. Each bucket has unique IP count and TEMP_BLOCK count.
+| Schema                | Used for                                                           |
+|-----------------------|--------------------------------------------------------------------|
+| `EventCreate`         | Validating incoming POST /api/events/ from ML engine (25 fields)  |
+| `EventResponse`       | Formatting outgoing event data to the frontend                     |
+| `BlockedIPResponse`   | Blocked IP rows for the Blocked IPs page                          |
+| `IPStatusResponse`    | Single IP block status check                                       |
+| `StatsResponse`       | Dashboard stat cards                                               |
+| `UserSessionResponse` | Session rows for the Logs page                                     |
 
-api/routes/blocked.py
-• [object Object] — returns all IPs where is_active = True, newest first.
-• [object Object] — admin manually blocks an IP. Creates or updates a blocked_ips row with a 120-second expiry.
-• [object Object] — sets is_active = False for the given IP.
+### `api/crud.py`
+All database read/write logic. Routes never touch the database directly — they always call a function from `crud.py`. Key functions:
 
-api/routes/sessions.py
-Serves the Logs page. The key detail: for each session row, the route looks up the first event from that IP on that day and attaches its event_id to the response. This makes the Event ID column in Logs match exactly what is shown on the Events page.
-• [object Object] — all sessions, newest first. Optional session_date filter.
-• [object Object] — streams an Excel file (.xlsx) with today's sessions. Columns: Event ID, IP Address, Login Time, Logout Time, Duration, Traffic Used, Destination, Anomaly Score, Stability Score, Network Load, Risk Level.
+- `create_event()` — saves a new event, then automatically calls `_upsert_blocked_ip()` if action is `TEMP_BLOCK` and `_upsert_user_session()` to update the sessions table
+- `get_stats()` — runs COUNT, AVG, GROUP BY queries to compute dashboard card data
+- `_upsert_user_session()` — creates a new session row for a new IP, or updates `logout_time` and adds traffic bytes for a returning IP on the same day
+- `_upsert_blocked_ip()` — creates or updates a `blocked_ips` row, increments `strike_count` on repeated blocks
 
+### `api/routes/events.py`
+- `POST /api/events/` — ML engine sends one event here after analyzing a flow
+- `GET /api/events/` — frontend reads events for the Events page (params: `limit`, `risk_level`, `source_ip`)
 
-API Reference
-Base URL: http://127.0.0.1:8000   |   Interactive docs: http://127.0.0.1:8000/docs
+### `api/routes/stats.py`
+- `GET /api/stats/` — aggregated numbers for dashboard cards: total flows, anomalies, risk distribution, blocked IPs, average network load
+- `GET /api/stats/chart-data?period=24h` — time-bucketed data for the chart. For `24h`: 12 buckets of 2 hours each, labeled `00/02/04.../22`. For `7d`: 7 daily buckets. Each bucket has unique IP count and TEMP_BLOCK count.
 
-Method	Endpoint	Who calls it	What it does
-GET	/	Anyone	Health check — returns system status
-POST	/api/events/	ML engine	Receive and store a new network event
-GET	/api/events/	React	List events (params: limit, risk_level, source_ip)
-GET	/api/events/{event_id}	React	Get one event by ID
-GET	/api/stats/	React	Dashboard stat card data
-GET	/api/stats/chart-data	React	Time-series data for chart (period=24h or 7d)
-GET	/api/blocked	React	List active blocked IPs
-POST	/api/block/{ip}	React (admin)	Manually block an IP for 120 seconds
-POST	/api/unblock/{ip}	React (admin)	Unblock an IP
-GET	/api/ip/{ip}	React	Check block status of one IP
-GET	/api/sessions/	React	List user sessions
-GET	/api/sessions/today	React	Sessions for today only
-GET	/api/sessions/export	React (admin)	Download today's sessions as .xlsx
+### `api/routes/blocked.py`
+- `GET /api/blocked` — all IPs where `is_active = True`
+- `POST /api/block/{ip}` — admin manually blocks an IP for 120 seconds
+- `POST /api/unblock/{ip}` — sets `is_active = False`
 
+### `api/routes/sessions.py`
+Serves the Logs page. For each session, looks up the first event from that IP on that day and attaches its `event_id` — so the Event ID column in Logs matches exactly what is shown on the Events page.
 
-Database
-Setting	Value
-Database name	percepta_db
-Username	percepta_user
-Password	percepta_pass
-Host	localhost
-Port	5432
+- `GET /api/sessions/` — all sessions, newest first
+- `GET /api/sessions/export` — streams an `.xlsx` file with today's sessions including columns: Event ID, IP Address, Login Time, Logout Time, Duration, Traffic Used, Destination, Anomaly Score, Stability Score, Network Load, Risk Level
 
-The .env file in percepta_backend/ must contain:
+---
+
+## API Reference
+
+Base URL: `http://127.0.0.1:8000`  
+Interactive docs: `http://127.0.0.1:8000/docs`
+
+| Method | Endpoint                      | Caller          | Description                                      |
+|--------|-------------------------------|-----------------|--------------------------------------------------|
+| GET    | `/`                           | Anyone          | Health check                                     |
+| POST   | `/api/events/`                | ML engine       | Receive and store a new network event            |
+| GET    | `/api/events/`                | React           | List events (limit, risk_level, source_ip)       |
+| GET    | `/api/events/{event_id}`      | React           | Get one event by ID                              |
+| GET    | `/api/stats/`                 | React           | Dashboard stat card data                         |
+| GET    | `/api/stats/chart-data`       | React           | Time-series chart data (period=24h or 7d)        |
+| GET    | `/api/blocked`                | React           | List active blocked IPs                          |
+| POST   | `/api/block/{ip}`             | React (admin)   | Manually block an IP for 120 seconds             |
+| POST   | `/api/unblock/{ip}`           | React (admin)   | Unblock an IP                                    |
+| GET    | `/api/ip/{ip}`                | React           | Check block status of one IP                     |
+| GET    | `/api/sessions/`              | React           | List user sessions                               |
+| GET    | `/api/sessions/today`         | React           | Sessions for today only                          |
+| GET    | `/api/sessions/export`        | React (admin)   | Download today's sessions as .xlsx               |
+
+---
+
+## Database
+
+```
+Database: percepta_db
+User:     percepta_user
+Password: percepta_pass
+Host:     localhost
+Port:     5432
+```
+
+The `.env` file inside `percepta_backend/` must contain:
+
+```env
 DATABASE_URL=postgresql://percepta_user:percepta_pass@localhost:5432/percepta_db
+```
 
+---
 
-Frontend — Page by Page
-Page	File	What it shows	Refresh
-Dashboard	DashboardPage.jsx	Stat cards, time-series chart, recent events, protocol mix	Every 15s
-Events	EventsPage.jsx	Full event table with search, filter, sort, View modal	Every 10s
-Blocked IPs	BlockedPage.jsx	Active blocked IPs, unblock button, count synced to dashboard	Every 10s
-Logs	LogsPage.jsx	Session log table, Export Today → downloads .xlsx	On load
+## Frontend — Page Descriptions
 
-api/index.js
-Single file that contains every API call the frontend makes. All fetch() calls go through a shared request() helper that sets the base URL and handles errors. To change the backend address, only this one file needs to be updated.
+| Page        | File                  | Description                                                                 | Auto-refresh |
+|-------------|-----------------------|-----------------------------------------------------------------------------|--------------|
+| Dashboard   | `DashboardPage.jsx`   | Stat cards (flows, blocked IPs, network load), time-series chart, recent events, protocol mix | Every 15s |
+| Events      | `EventsPage.jsx`      | Full event table with search by IP/event ID, filter by risk/stability/time, sort. View button opens modal with all ML fields + Block IP button | Every 10s |
+| Blocked IPs | `BlockedPage.jsx`     | Active blocked IPs with expiry time and strike count. Admin can unblock manually. Count syncs with dashboard | Every 10s |
+| Logs        | `LogsPage.jsx`        | Session log — one row per IP per day. Event ID matches the Events page. Export Today downloads .xlsx | On load |
 
-EventModal.jsx
-Popup that appears when admin clicks View on an event. Shows all 12 ML fields (anomaly score, threshold, stability, risk score, network load, etc.). Contains a Block IP button that calls POST /api/block/{ip} directly. If the IP is already blocked it shows Already Blocked (greyed out).
+### `api/index.js`
+Single file containing every API call the frontend makes. All `fetch()` calls go through a shared `request()` helper. To change the backend address, only this one file needs updating.
 
+### `EventModal.jsx`
+Popup showing all 12 ML fields for a selected event. Contains a **Block IP** button that calls `POST /api/block/{ip}`. If the IP is already blocked it shows **Already Blocked** (disabled).
 
-How to Run
-Requirements
-• Python 3.11+
-• Node.js 18+
-• PostgreSQL 15+ running on localhost:5432
-• pgAdmin 4 (optional — for inspecting the database)
+---
 
-Step 1 — Install Python dependencies
+## How to Run
+
+### Requirements
+- Python 3.11+
+- Node.js 18+
+- PostgreSQL 15+ running on `localhost:5432`
+
+### 1. Install Python dependencies
+```bash
 cd percepta_backend
 pip install -r requirements.txt
-pip install openpyxl      # needed for Export Today button
+pip install openpyxl    # needed for Export Today button
+```
 
-Step 2 — Create .env file
-Create a file at percepta_backend/.env with this content:
+### 2. Create `.env` file
+Create `percepta_backend/.env`:
+```env
 DATABASE_URL=postgresql://percepta_user:percepta_pass@localhost:5432/percepta_db
+```
 
-Step 3 — Start the backend
+### 3. Start the backend
+```bash
 cd percepta_backend
 uvicorn main:app --reload --port 8000
-PostgreSQL tables are created automatically on first startup. API will be at http://127.0.0.1:8000.
-To see all endpoints with live testing: http://127.0.0.1:8000/docs
+```
+Tables are created automatically on first run.  
+API: `http://127.0.0.1:8000` | Docs: `http://127.0.0.1:8000/docs`
 
-Step 4 — Start the frontend
+### 4. Start the frontend
+```bash
 cd percepta-frontend
 npm install
 npm run dev
-Dashboard opens at http://127.0.0.1:5173.
+```
+Dashboard: `http://127.0.0.1:5173`
 
-Step 5 — Populate Logs (first time only)
-If the Logs page shows 0 sessions after the first run, execute the migration script once:
+### 5. Populate Logs (one-time migration)
+If the Logs page shows 0 sessions after the first run:
+```bash
 cd percepta_backend
 python migrate_sessions.py
-This reads all existing events from the database and creates the corresponding session rows. Only needs to be run once.
+```
+This reads all existing events and creates the corresponding session rows. Run once only.
 
+---
 
-How the Three Parts Connect
-My backend is the middle layer between the ML engine and the frontend:
-ML Engine  →  POST /api/events/  →  Backend  →  PostgreSQL
-React      →  GET  /api/events/  →  Backend  →  PostgreSQL
-React      →  GET  /api/stats/   →  Backend  →  PostgreSQL
+## How It All Connects
 
-The ML engine (Mirkomil) calls POST /api/events/ after analyzing each network flow. The backend validates the data, saves it to the events table, and if the action is TEMP_BLOCK, also updates the blocked_ips and user_sessions tables automatically.
-The React frontend never writes to the database directly. It only reads via GET requests and sends admin actions (block/unblock) via POST. The frontend does not need to know anything about the ML engine — it only knows the backend API.
+```
+Scapy (Muhammad)
+    ↓ captures packets
+ML Engine (Mirkomil)
+    ↓ POST /api/events/  {anomaly_score, risk_level, action_taken, ...}
+FastAPI Backend  ←→  PostgreSQL
+    ↓ GET /api/stats/, /api/events/, /api/sessions/, ...
+React Dashboard (Asilbek)
+    ↓
+Admin sees real-time network security data
+```
 
+The ML engine calls `POST /api/events/` after analyzing each flow. The backend validates, saves the event, and automatically updates `blocked_ips` and `user_sessions` tables if needed.
 
-Percepta  •  Web Platform & Backend  •  Asilbek Tashpulatov  •  2026
+The React frontend never writes to the database directly — it only reads via GET requests and sends admin actions (block/unblock) via POST. The frontend has no knowledge of the ML engine; it only knows the backend API address.
+
+---
+
+*Percepta · Web Platform & Backend · Asilbek Tashpulatov · 2026*
