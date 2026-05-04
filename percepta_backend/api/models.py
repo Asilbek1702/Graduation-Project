@@ -81,7 +81,7 @@ class UserSession(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     # Unique session identifier  e.g. "ses_000001"
-    session_id = Column(String(32), unique=True, index=True, nullable=False)
+    session_id = Column(String(32), index=True, nullable=False)
 
     # The IP address of this session
     ip_address = Column(String(45), index=True, nullable=False)

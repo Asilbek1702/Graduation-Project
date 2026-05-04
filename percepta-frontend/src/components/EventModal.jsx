@@ -6,6 +6,7 @@ function anomalyColor(v) { return v < 0.20 ? 'var(--red)' : v < 0.35 ? 'var(--or
 function stabColor(v)    { return v >= 0.75 ? 'var(--red)' : v >= 0.55 ? 'var(--orange)' : v >= 0.30 ? 'var(--yellow)' : 'var(--green)' }
 function riskScoreColor(v){ return v >= 0.75 ? 'var(--red)' : v >= 0.50 ? 'var(--orange)' : v >= 0.30 ? 'var(--yellow)' : 'var(--green)' }
 function loadColor(v)    { return v > 0.70 ? 'var(--orange)' : v > 0.30 ? 'var(--yellow)' : 'var(--green)' }
+function formatDecimal(v) { return typeof v === 'number' ? v.toFixed(2) : v }
 
 function Field({ label, value, color }) {
   return (
@@ -70,11 +71,11 @@ export default function EventModal({ event, onClose, onBlocked }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
           <Field label="Source IP"         value={event.source_ip} />
           <Field label="Destination"       value={event.destination_ip ? `${event.destination_ip}:${event.destination_port ?? ''}` : '—'} />
-          <Field label="Anomaly Score"     value={event.anomaly_score?.toFixed(3)}   color={anomalyColor(event.anomaly_score)} />
-          <Field label="Threshold"         value={event.adaptive_threshold?.toFixed(3)} />
-          <Field label="Stability Score"   value={event.stability_score?.toFixed(3)} color={stabColor(event.stability_score ?? 0)} />
-          <Field label="Risk Score"        value={event.risk_score?.toFixed(3)}      color={riskScoreColor(event.risk_score)} />
-          <Field label="Network Load"      value={event.network_load?.toFixed(3)}    color={loadColor(event.network_load ?? 0)} />
+          <Field label="Anomaly Score"     value={formatDecimal(event.anomaly_score)}        color={anomalyColor(event.anomaly_score)} />
+          <Field label="Threshold"         value={formatDecimal(event.adaptive_threshold)} />
+          <Field label="Stability Score"   value={formatDecimal(event.stability_score)}      color={stabColor(event.stability_score ?? 0)} />
+          <Field label="Risk Score"        value={formatDecimal(event.risk_score)}           color={riskScoreColor(event.risk_score)} />
+          <Field label="Network Load"      value={formatDecimal(event.network_load)}         color={loadColor(event.network_load ?? 0)} />
           <Field label="Anomaly Count"     value={event.anomaly_count_window} />
           <Field label="Max Consecutive"   value={event.max_consecutive_anomalies} />
           <Field label="Risk Level"        value={event.risk_level}                  color={riskColor[event.risk_level]} />

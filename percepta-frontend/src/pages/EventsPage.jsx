@@ -11,6 +11,20 @@ const STATUS_MAP = {
 }
 const riskOrder = { CRITICAL:0, HIGH:1, MEDIUM:2, LOW:3 }
 
+function normalizeSearch(value) {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+function matchesSearch(values, query) {
+  const q = normalizeSearch(query)
+  if (!q) return true
+  return values.some(value => normalizeSearch(value).includes(q))
+}
+
 export default function EventsPage() {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
@@ -22,7 +36,7 @@ export default function EventsPage() {
 
   async function fetchEvents() {
     try {
-      const data = await api.getEvents({ limit: 100 })
+      const data = await api.getEvents({ limit: 1000 })
       setEvents(data)
     } catch (e) {
       console.error('Events API error:', e)
@@ -56,8 +70,13 @@ export default function EventsPage() {
   }
 
   const filtered = events.filter(e => {
-    if (!search) return true
-    return e.source_ip.includes(search) || e.event_id.toLowerCase().includes(search.toLowerCase())
+    return matchesSearch([
+      e.source_ip,
+      e.event_id,
+      e.risk_level,
+      e.action_taken,
+      e.timestamp,
+    ], search)
   })
 
   return (

@@ -13,10 +13,35 @@ from api import models, schemas
 #  EVENTS
 # ─────────────────────────────────────────────
 
-def create_event(db: Session, event: schemas.EventCreate) -> models.Event:
-    """Insert a new event. Also updates BlockedIP and UserSession tables."""
+def _generate_event_id(db: Session) -> str:
+    """
+    Generate sequential event ID: EVT-000001, EVT-000002, ...
+    Uses the current max id in the table to determine next number.
+    Thread-safe because PostgreSQL auto-increment id is used as base.
+    """
+    max_id = db.query(func.max(models.Event.id)).scalar() or 0
+    return f"EVT-{str(max_id + 1).zfill(6)}"
 
-    db_event = models.Event(**event.model_dump())
+
+def create_event(db: Session, event: schemas.EventCreate) -> models.Event:
+    """
+    Insert a new event.
+    - Checks for duplicate event_id — returns existing if found.
+    - Overrides event_id with sequential EVT-XXXXXX format.
+    - Auto-updates BlockedIP and UserSession tables.
+    """
+    # Check duplicate
+    existing = db.query(models.Event).filter(
+        models.Event.event_id == event.event_id
+    ).first()
+    if existing:
+        return existing
+
+    # Generate sequential event_id (override whatever was sent)
+    data = event.model_dump()
+    data["event_id"] = _generate_event_id(db)
+
+    db_event = models.Event(**data)
     db.add(db_event)
     db.commit()
     db.refresh(db_event)
@@ -26,7 +51,7 @@ def create_event(db: Session, event: schemas.EventCreate) -> models.Event:
         _upsert_blocked_ip(db, event)
 
     # Auto-manage UserSession table
-    _upsert_user_session(db, event)
+    _upsert_user_session(db, db_event)
 
     return db_event
 
@@ -38,7 +63,6 @@ def get_events(
     source_ip: Optional[str] = None,
 ) -> List[models.Event]:
     """Return latest events with optional filters."""
-
     query = db.query(models.Event)
     if risk_level:
         query = query.filter(models.Event.risk_level == risk_level.upper())
@@ -58,7 +82,6 @@ def get_event_by_id(db: Session, event_id: str) -> Optional[models.Event]:
 
 def get_stats(db: Session) -> schemas.StatsResponse:
     """Compute dashboard stats from the events table."""
-
     total_flows = db.query(func.count(models.Event.id)).scalar() or 0
     total_anomalies = db.query(func.count(models.Event.id)).filter(
         models.Event.is_anomaly == True
@@ -90,7 +113,7 @@ def get_stats(db: Session) -> schemas.StatsResponse:
             critical=dist["CRITICAL"],
         ),
         blocked_ips=blocked_ips,
-        current_network_load=round(float(avg_load), 3),
+        current_network_load=round(float(avg_load), 2),
     )
 
 
@@ -205,38 +228,35 @@ def _upsert_blocked_ip(db: Session, event: schemas.EventCreate) -> None:
     db.commit()
 
 
-def _upsert_user_session(db: Session, event: schemas.EventCreate) -> None:
+def _upsert_user_session(db: Session, db_event: models.Event) -> None:
     """
     Create or update a UserSession row.
     One session per unique IP per calendar day (UTC).
+    Uses the saved db_event (with real event_id EVT-XXXXXX).
     """
-    event_dt = event.timestamp if event.timestamp else datetime.utcnow()
+    event_dt     = db_event.timestamp if db_event.timestamp else datetime.utcnow()
     session_date = event_dt.strftime("%Y-%m-%d")
 
     record = db.query(models.UserSession).filter(
-        models.UserSession.ip_address == event.source_ip,
+        models.UserSession.ip_address == db_event.source_ip,
         models.UserSession.session_date == session_date,
     ).first()
 
-    bytes_this_event = event.total_bytes or 0
+    bytes_this_event = db_event.total_bytes or 0
 
     if record:
-        # Update logout_time to latest event
-        if event_dt > record.logout_time if record.logout_time else True:
+        if record.logout_time is None or event_dt > record.logout_time:
             record.logout_time = event_dt
         record.traffic_bytes += bytes_this_event
-        # Mark ENDED only if action is terminal (TEMP_BLOCK)
-        # Otherwise keep ACTIVE
-        if event.action_taken == "TEMP_BLOCK":
+        if db_event.action_taken == "TEMP_BLOCK":
             record.status = "ENDED"
     else:
-        # Count existing sessions to generate session_id
-        count = db.query(func.count(models.UserSession.id)).scalar() or 0
+        count      = db.query(func.count(models.UserSession.id)).scalar() or 0
         session_id = f"ses_{str(count + 1).zfill(6)}"
 
         record = models.UserSession(
             session_id=session_id,
-            ip_address=event.source_ip,
+            ip_address=db_event.source_ip,
             session_date=session_date,
             login_time=event_dt,
             logout_time=event_dt,

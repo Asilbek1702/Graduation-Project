@@ -22,46 +22,86 @@ def get_chart_data(
     db: Session = Depends(get_db),
 ):
     """
-    24h → 12 buckets x 2 hours, labels: "00","02","04",...,"22"
-    7d  → 7 buckets x 1 day,   labels: "Mon","Tue",...
+    24h → TODAY from 00:00 to now, split into 2-hour buckets.
+          Labels: "00", "02", "04", ..., up to current hour.
+          This gives REAL-TIME data for today only.
+
+    7d  → Last 7 days, one bucket per day.
+          Labels: "Mon", "Tue", ...
     """
     now = datetime.utcnow()
 
     if period == "24h":
-        buckets = 12
-        delta   = timedelta(hours=2)
-        start   = now - timedelta(hours=24)
-        start   = start.replace(minute=0, second=0, microsecond=0)
-        if start.hour % 2 != 0:
-            start = start - timedelta(hours=1)
-    else:
-        buckets = 7
-        delta   = timedelta(days=1)
-        start   = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
+        # Start from today 00:00, end at now
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    labels, unique_ips, blocked_counts = [], [], []
+        # Build 2-hour buckets from 00:00 to now
+        labels, unique_ips, blocked_counts = [], [], []
 
-    for i in range(buckets):
-        b_start = start + i * delta
-        b_end   = b_start + delta
+        hour = 0
+        while hour < 24:
+            b_start = today_start + timedelta(hours=hour)
+            b_end   = b_start + timedelta(hours=2)
 
-        ip_count = (
-            db.query(func.count(func.distinct(models.Event.source_ip)))
-            .filter(models.Event.timestamp >= b_start, models.Event.timestamp < b_end)
-            .scalar() or 0
-        )
-        block_count = (
-            db.query(func.count(models.Event.id))
-            .filter(
-                models.Event.timestamp >= b_start,
-                models.Event.timestamp < b_end,
-                models.Event.action_taken == "TEMP_BLOCK",
+            # Don't go past current time
+            if b_start > now:
+                break
+
+            # Cap bucket end at now for the current bucket
+            actual_end = min(b_end, now)
+
+            ip_count = (
+                db.query(func.count(func.distinct(models.Event.source_ip)))
+                .filter(
+                    models.Event.timestamp >= b_start,
+                    models.Event.timestamp < actual_end,
+                )
+                .scalar() or 0
             )
-            .scalar() or 0
-        )
+            block_count = (
+                db.query(func.count(models.Event.id))
+                .filter(
+                    models.Event.timestamp >= b_start,
+                    models.Event.timestamp < actual_end,
+                    models.Event.action_taken == "TEMP_BLOCK",
+                )
+                .scalar() or 0
+            )
 
-        labels.append(f"{b_start.hour:02d}" if period == "24h" else b_start.strftime("%a"))
-        unique_ips.append(ip_count)
-        blocked_counts.append(block_count)
+            labels.append(f"{hour:02d}")
+            unique_ips.append(ip_count)
+            blocked_counts.append(block_count)
+
+            hour += 2
+
+    else:  # 7d
+        labels, unique_ips, blocked_counts = [], [], []
+        start = (now - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+        for i in range(7):
+            b_start = start + timedelta(days=i)
+            b_end   = b_start + timedelta(days=1)
+
+            ip_count = (
+                db.query(func.count(func.distinct(models.Event.source_ip)))
+                .filter(
+                    models.Event.timestamp >= b_start,
+                    models.Event.timestamp < b_end,
+                )
+                .scalar() or 0
+            )
+            block_count = (
+                db.query(func.count(models.Event.id))
+                .filter(
+                    models.Event.timestamp >= b_start,
+                    models.Event.timestamp < b_end,
+                    models.Event.action_taken == "TEMP_BLOCK",
+                )
+                .scalar() or 0
+            )
+
+            labels.append(b_start.strftime("%a"))
+            unique_ips.append(ip_count)
+            blocked_counts.append(block_count)
 
     return {"labels": labels, "unique_ips": unique_ips, "blocked_ips": blocked_counts}

@@ -3,6 +3,20 @@ import { api } from '../api'
 
 const LOGS_PER_PAGE = 10
 
+function normalizeSearch(value) {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+function matchesSearch(values, query) {
+  const q = normalizeSearch(query)
+  if (!q) return true
+  return values.some(value => normalizeSearch(value).includes(q))
+}
+
 function formatBytes(b) {
   if (!b && b !== 0) return '—'
   if (b >= 1_073_741_824) return (b / 1_073_741_824).toFixed(2) + ' GB'
@@ -44,13 +58,13 @@ export default function LogsPage() {
 
   // Filter
   const filtered = sessions.filter(s => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return (
-      s.ip_address.toLowerCase().includes(q) ||
-      s.session_id.toLowerCase().includes(q) ||
-      s.session_date.includes(q)
-    )
+    return matchesSearch([
+      s.ip_address,
+      s.session_id,
+      s.event_id,
+      s.session_date,
+      formatTime(s.login_time),
+    ], search)
   })
 
   // Sort by login_time (desc = largest/newest first)
